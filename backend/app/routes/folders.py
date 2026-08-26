@@ -5,14 +5,28 @@ from app.schemas.folder import FolderCreate, FolderRename, FolderOut, Breadcrumb
 
 router = APIRouter(prefix="/folders", tags=["Folders"])
 
-def _get_owned_folder(folder_id: str, user_id: str) -> dict:
+
+def _get_owned_folder(folder_id: str, user_id: str, require_edit: bool = False) -> dict:
     result = supabase.table("folders").select("*").eq("id", folder_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Folder not found")
     folder = result.data[0]
-    if folder["owner_id"] != user_id:
+
+    if folder["owner_id"] == user_id:
+        return folder
+
+    share = supabase.table("shares").select("*") \
+        .eq("resource_type", "folder").eq("resource_id", folder_id) \
+        .eq("shared_with_id", user_id).execute()
+
+    if not share.data:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    if require_edit and share.data[0]["permission"] != "editor":
+        raise HTTPException(status_code=403, detail="Viewer permission does not allow this action")
+
     return folder
+
 
 @router.post("", response_model=FolderOut)
 def create_folder(payload: FolderCreate, current_user: dict = Depends(get_current_user)):
@@ -30,6 +44,7 @@ def create_folder(payload: FolderCreate, current_user: dict = Depends(get_curren
 
     return result.data[0]
 
+
 @router.get("", response_model=list[FolderOut])
 def list_folders(parent_id: str | None = None, current_user: dict = Depends(get_current_user)):
     query = supabase.table("folders").select("*").eq("owner_id", current_user["id"])
@@ -40,21 +55,25 @@ def list_folders(parent_id: str | None = None, current_user: dict = Depends(get_
     result = query.execute()
     return result.data
 
+
 @router.get("/{folder_id}", response_model=FolderOut)
 def get_folder(folder_id: str, current_user: dict = Depends(get_current_user)):
     return _get_owned_folder(folder_id, current_user["id"])
 
+
 @router.patch("/{folder_id}/rename", response_model=FolderOut)
 def rename_folder(folder_id: str, payload: FolderRename, current_user: dict = Depends(get_current_user)):
-    _get_owned_folder(folder_id, current_user["id"])
+    _get_owned_folder(folder_id, current_user["id"], require_edit=True)
     result = supabase.table("folders").update({"name": payload.new_name}).eq("id", folder_id).execute()
     return result.data[0]
 
+
 @router.delete("/{folder_id}")
 def delete_folder(folder_id: str, current_user: dict = Depends(get_current_user)):
-    _get_owned_folder(folder_id, current_user["id"])
+    _get_owned_folder(folder_id, current_user["id"], require_edit=True)
     supabase.table("folders").delete().eq("id", folder_id).execute()
     return {"message": "Folder deleted successfully"}
+
 
 @router.get("/{folder_id}/breadcrumbs", response_model=list[BreadcrumbItem])
 def get_breadcrumbs(folder_id: str, current_user: dict = Depends(get_current_user)):
