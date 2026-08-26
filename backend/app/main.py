@@ -4,11 +4,13 @@ from app.routes import auth
 from app.routes import files
 from app.routes import shares
 from app.routes import folders
+from app.routes import public_links
 app = FastAPI(title="Cloud Media Storage API")
 app.include_router(auth.router)
 app.include_router(files.router)
 app.include_router(shares.router)
 app.include_router(folders.router)
+app.include_router(public_links.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
