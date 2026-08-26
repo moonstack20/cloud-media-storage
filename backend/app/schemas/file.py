@@ -11,4 +11,8 @@ class FileOut(BaseModel):
     mime_type: str | None = None
     folder_id: UUID | None = None
     created_at: datetime
-    
+class FileRename(BaseModel):
+    new_name: str
+
+class FileMove(BaseModel):
+    folder_id: UUID | None = None    

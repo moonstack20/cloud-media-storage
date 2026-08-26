@@ -61,3 +61,39 @@ def download_file(file_id: str, current_user: dict = Depends(get_current_user)):
 def list_files(current_user: dict = Depends(get_current_user)):
     result = supabase.table("files").select("*").eq("owner_id", current_user["id"]).execute()
     return result.data
+from app.schemas.file import FileRename, FileMove
+
+def _get_owned_file(file_id: str, user_id: str) -> dict:
+    result = supabase.table("files").select("*").eq("id", file_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="File not found")
+    file_record = result.data[0]
+    if file_record["owner_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return file_record
+
+@router.get("/{file_id}", response_model=FileOut)
+def get_file_metadata(file_id: str, current_user: dict = Depends(get_current_user)):
+    return _get_owned_file(file_id, current_user["id"])
+
+@router.patch("/{file_id}/rename", response_model=FileOut)
+def rename_file(file_id: str, payload: FileRename, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"])
+    result = supabase.table("files").update({"file_name": payload.new_name}).eq("id", file_id).execute()
+    return result.data[0]
+
+@router.patch("/{file_id}/move", response_model=FileOut)
+def move_file(file_id: str, payload: FileMove, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"])
+    folder_id_str = str(payload.folder_id) if payload.folder_id else None
+    result = supabase.table("files").update({"folder_id": folder_id_str}).eq("id", file_id).execute()
+    return result.data[0]
+
+@router.delete("/{file_id}")
+def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    file_record = _get_owned_file(file_id, current_user["id"])
+
+    supabase.storage.from_(BUCKET_NAME).remove([file_record["storage_path"]])
+    supabase.table("files").delete().eq("id", file_id).execute()
+
+    return {"message": "File deleted successfully"}
