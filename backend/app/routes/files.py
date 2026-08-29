@@ -2,7 +2,7 @@ import uuid
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from app.core.database import supabase
 from app.core.deps import get_current_user
-from app.schemas.file import FileOut, FileRename, FileMove
+from app.schemas.file import FileOut, FileRename, FileMove, FileStarUpdate
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -108,3 +108,38 @@ def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
     supabase.table("files").delete().eq("id", file_id).execute()
 
     return {"message": "File deleted successfully"}
+
+
+@router.get("/search/query", response_model=list[FileOut])
+def search_files(
+    q: str | None = None,
+    mime_type: str | None = None,
+    starred: bool | None = None,
+    sort_by: str = "created_at",
+    order: str = "desc",
+    current_user: dict = Depends(get_current_user)
+):
+    query = supabase.table("files").select("*").eq("owner_id", current_user["id"])
+
+    if q:
+        query = query.ilike("file_name", f"%{q}%")
+    if mime_type:
+        query = query.ilike("mime_type", f"{mime_type}%")
+    if starred is not None:
+        query = query.eq("starred", starred)
+
+    valid_sort_fields = {"created_at", "file_name", "file_size"}
+    sort_field = sort_by if sort_by in valid_sort_fields else "created_at"
+    ascending = order == "asc"
+
+    query = query.order(sort_field, desc=not ascending)
+
+    result = query.execute()
+    return result.data
+
+
+@router.patch("/{file_id}/star", response_model=FileOut)
+def toggle_star(file_id: str, payload: FileStarUpdate, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"])
+    result = supabase.table("files").update({"starred": payload.starred}).eq("id", file_id).execute()
+    return result.data[0]
