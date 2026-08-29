@@ -171,3 +171,98 @@ def permanent_delete_file(file_id: str, current_user: dict = Depends(get_current
     supabase.table("files").delete().eq("id", file_id).execute()
 
     return {"message": "File permanently deleted"}
+
+
+from fastapi import UploadFile as _UploadFile, File as _File
+from app.schemas.file import FileVersionOut
+
+
+@router.post("/{file_id}/versions", response_model=FileOut)
+async def upload_new_version(
+    file_id: str,
+    file: _UploadFile = _File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    current = _get_owned_file(file_id, current_user["id"], require_edit=True)
+
+    existing_versions = supabase.table("file_versions").select("version_number") \
+        .eq("file_id", file_id).order("version_number", desc=True).limit(1).execute()
+
+    next_version_number = (existing_versions.data[0]["version_number"] + 1) if existing_versions.data else 1
+
+    supabase.table("file_versions").insert({
+        "file_id": file_id,
+        "storage_path": current["storage_path"],
+        "file_size": current["file_size"],
+        "version_number": next_version_number
+    }).execute()
+
+    file_bytes = await file.read()
+    file_ext = file.filename.split(".")[-1] if "." in file.filename else ""
+    new_storage_path = f"{current_user['id']}/{uuid.uuid4()}.{file_ext}"
+
+    supabase.storage.from_(BUCKET_NAME).upload(
+        new_storage_path,
+        file_bytes,
+        {"content-type": file.content_type or "application/octet-stream"}
+    )
+
+    result = supabase.table("files").update({
+        "storage_path": new_storage_path,
+        "file_size": len(file_bytes),
+        "mime_type": file.content_type
+    }).eq("id", file_id).execute()
+
+    return result.data[0]
+
+
+@router.get("/{file_id}/versions", response_model=list[FileVersionOut])
+def list_versions(file_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"])
+    result = supabase.table("file_versions").select("*") \
+        .eq("file_id", file_id).order("version_number", desc=True).execute()
+    return result.data
+
+
+@router.post("/{file_id}/versions/{version_id}/restore", response_model=FileOut)
+def restore_version(file_id: str, version_id: str, current_user: dict = Depends(get_current_user)):
+    current = _get_owned_file(file_id, current_user["id"], require_edit=True)
+
+    version_result = supabase.table("file_versions").select("*").eq("id", version_id).execute()
+    if not version_result.data:
+        raise HTTPException(status_code=404, detail="Version not found")
+    version = version_result.data[0]
+
+    if version["file_id"] != file_id:
+        raise HTTPException(status_code=400, detail="Version does not belong to this file")
+
+    existing_versions = supabase.table("file_versions").select("version_number") \
+        .eq("file_id", file_id).order("version_number", desc=True).limit(1).execute()
+    next_version_number = (existing_versions.data[0]["version_number"] + 1) if existing_versions.data else 1
+
+    supabase.table("file_versions").insert({
+        "file_id": file_id,
+        "storage_path": current["storage_path"],
+        "file_size": current["file_size"],
+        "version_number": next_version_number
+    }).execute()
+
+    result = supabase.table("files").update({
+        "storage_path": version["storage_path"],
+        "file_size": version["file_size"]
+    }).eq("id", file_id).execute()
+
+    return result.data[0]
+
+
+@router.get("/{file_id}/versions/{version_id}/download")
+def download_version(file_id: str, version_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"])
+
+    version_result = supabase.table("file_versions").select("*").eq("id", version_id).execute()
+    if not version_result.data:
+        raise HTTPException(status_code=404, detail="Version not found")
+    version = version_result.data[0]
+
+    signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(version["storage_path"], 60)
+    return {"download_url": signed_url.get("signedURL") or signed_url.get("signedUrl")}

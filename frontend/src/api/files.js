@@ -27,3 +27,19 @@ export const listTrash = () => client.get('/files/trash')
 export const restoreFile = (fileId) => client.patch(`/files/${fileId}/restore`)
 
 export const permanentDelete = (fileId) => client.delete(`/files/${fileId}/permanent`)
+
+export const uploadNewVersion = (fileId, file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return client.post(`/files/${fileId}/versions`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export const listVersions = (fileId) => client.get(`/files/${fileId}/versions`)
+
+export const restoreVersion = (fileId, versionId) =>
+  client.post(`/files/${fileId}/versions/${versionId}/restore`)
+
+export const downloadVersion = (fileId, versionId) =>
+  client.get(`/files/${fileId}/versions/${versionId}/download`)

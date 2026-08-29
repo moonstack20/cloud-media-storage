@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import * as filesApi from '../api/files'
+import VersionHistoryModal from '../components/VersionHistoryModal'
 
 function formatBytes(bytes) {
   if (!bytes) return '—'
@@ -28,6 +29,7 @@ export default function Dashboard() {
   const [starredOnly, setStarredOnly] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
+  const [historyFile, setHistoryFile] = useState(null)
 
   const loadFiles = useCallback(async () => {
     setLoading(true)
@@ -190,6 +192,9 @@ export default function Dashboard() {
                   <button onClick={() => handleDownload(file)} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
                     Download
                   </button>
+                  <button onClick={() => setHistoryFile(file)} className="text-[#B08D57] hover:text-[#8f7143]">
+                    History
+                  </button>
                   <button onClick={() => handleDelete(file)} className="text-[#A63D40]/70 hover:text-[#A63D40]">
                     Delete
                   </button>
@@ -199,6 +204,14 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {historyFile && (
+        <VersionHistoryModal
+          file={historyFile}
+          onClose={() => setHistoryFile(null)}
+          onRestored={loadFiles}
+        />
+      )}
     </div>
   )
 }

@@ -21,3 +21,11 @@ class FileMove(BaseModel):
 
 class FileStarUpdate(BaseModel):
     starred: bool
+
+class FileVersionOut(BaseModel):
+    id: UUID
+    file_id: UUID
+    storage_path: str
+    file_size: int | None = None
+    version_number: int
+    created_at: datetime
