@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Trash from './pages/Trash'
+import Activity from './pages/Activity'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -18,6 +19,7 @@ function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/trash" element={<PrivateRoute><Trash /></PrivateRoute>} />
+      <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
     </Routes>
   )
 }

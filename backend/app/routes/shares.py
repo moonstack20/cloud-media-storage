@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.database import supabase
 from app.core.deps import get_current_user
+from app.core.activity import log_activity
 from app.schemas.share import ShareCreate, SharePermissionUpdate, ShareOut
 
 router = APIRouter(prefix="/shares", tags=["Sharing"])
@@ -41,6 +42,8 @@ def share_resource(payload: ShareCreate, current_user: dict = Depends(get_curren
         "shared_with_id": shared_with_id,
         "permission": payload.permission
     }).execute()
+
+    log_activity(current_user["id"], "share", payload.resource_type, str(payload.resource_id), payload.shared_with_email)
 
     return result.data[0]
 

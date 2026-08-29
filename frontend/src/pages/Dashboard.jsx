@@ -108,6 +108,12 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-6">
           <Link
+            to="/activity"
+            className="font-mono text-xs uppercase tracking-wide text-[#1B2A41]/60 hover:text-[#1B2A41] transition-colors"
+          >
+            Activity
+          </Link>
+          <Link
             to="/trash"
             className="font-mono text-xs uppercase tracking-wide text-[#1B2A41]/60 hover:text-[#1B2A41] transition-colors"
           >

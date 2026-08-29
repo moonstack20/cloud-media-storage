@@ -3,7 +3,8 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from datetime import datetime, timezone
 from app.core.database import supabase
 from app.core.deps import get_current_user
-from app.schemas.file import FileOut, FileRename, FileMove, FileStarUpdate
+from app.core.activity import log_activity
+from app.schemas.file import FileOut, FileRename, FileMove, FileStarUpdate, FileVersionOut
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -61,7 +62,10 @@ async def upload_file(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save file metadata")
 
-    return result.data[0]
+    file_record = result.data[0]
+    log_activity(current_user["id"], "upload", "file", file_record["id"], file_record["file_name"])
+
+    return file_record
 
 
 @router.get("/download/{file_id}")
@@ -71,6 +75,8 @@ def download_file(file_id: str, current_user: dict = Depends(get_current_user)):
     signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(
         file_record["storage_path"], 60
     )
+
+    log_activity(current_user["id"], "download", "file", file_id, file_record["file_name"])
 
     return {"download_url": signed_url.get("signedURL") or signed_url.get("signedUrl")}
 
@@ -128,8 +134,12 @@ def get_file_metadata(file_id: str, current_user: dict = Depends(get_current_use
 
 @router.patch("/{file_id}/rename", response_model=FileOut)
 def rename_file(file_id: str, payload: FileRename, current_user: dict = Depends(get_current_user)):
-    _get_owned_file(file_id, current_user["id"], require_edit=True)
+    old_file = _get_owned_file(file_id, current_user["id"], require_edit=True)
     result = supabase.table("files").update({"file_name": payload.new_name}).eq("id", file_id).execute()
+
+    log_activity(current_user["id"], "rename", "file", file_id, payload.new_name,
+                 metadata={"old_name": old_file["file_name"], "new_name": payload.new_name})
+
     return result.data[0]
 
 
@@ -150,16 +160,22 @@ def toggle_star(file_id: str, payload: FileStarUpdate, current_user: dict = Depe
 
 @router.delete("/{file_id}")
 def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
-    _get_owned_file(file_id, current_user["id"], require_edit=True)
+    file_record = _get_owned_file(file_id, current_user["id"], require_edit=True)
     now = datetime.now(timezone.utc).isoformat()
     supabase.table("files").update({"deleted_at": now}).eq("id", file_id).execute()
+
+    log_activity(current_user["id"], "delete", "file", file_id, file_record["file_name"])
+
     return {"message": "File moved to trash"}
 
 
 @router.patch("/{file_id}/restore", response_model=FileOut)
 def restore_file(file_id: str, current_user: dict = Depends(get_current_user)):
-    _get_owned_file(file_id, current_user["id"], require_edit=True)
+    file_record = _get_owned_file(file_id, current_user["id"], require_edit=True)
     result = supabase.table("files").update({"deleted_at": None}).eq("id", file_id).execute()
+
+    log_activity(current_user["id"], "restore", "file", file_id, file_record["file_name"])
+
     return result.data[0]
 
 
@@ -173,14 +189,10 @@ def permanent_delete_file(file_id: str, current_user: dict = Depends(get_current
     return {"message": "File permanently deleted"}
 
 
-from fastapi import UploadFile as _UploadFile, File as _File
-from app.schemas.file import FileVersionOut
-
-
 @router.post("/{file_id}/versions", response_model=FileOut)
 async def upload_new_version(
     file_id: str,
-    file: _UploadFile = _File(...),
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
     current = _get_owned_file(file_id, current_user["id"], require_edit=True)
@@ -212,6 +224,8 @@ async def upload_new_version(
         "file_size": len(file_bytes),
         "mime_type": file.content_type
     }).eq("id", file_id).execute()
+
+    log_activity(current_user["id"], "upload_version", "file", file_id, current["file_name"])
 
     return result.data[0]
 
@@ -251,6 +265,9 @@ def restore_version(file_id: str, version_id: str, current_user: dict = Depends(
         "storage_path": version["storage_path"],
         "file_size": version["file_size"]
     }).eq("id", file_id).execute()
+
+    log_activity(current_user["id"], "restore_version", "file", file_id, current["file_name"],
+                 metadata={"restored_version": version["version_number"]})
 
     return result.data[0]
 
