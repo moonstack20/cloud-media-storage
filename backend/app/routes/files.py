@@ -1,5 +1,6 @@
 import uuid
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from datetime import datetime, timezone
 from app.core.database import supabase
 from app.core.deps import get_current_user
 from app.schemas.file import FileOut, FileRename, FileMove, FileStarUpdate
@@ -76,7 +77,47 @@ def download_file(file_id: str, current_user: dict = Depends(get_current_user)):
 
 @router.get("", response_model=list[FileOut])
 def list_files(current_user: dict = Depends(get_current_user)):
-    result = supabase.table("files").select("*").eq("owner_id", current_user["id"]).execute()
+    result = supabase.table("files").select("*") \
+        .eq("owner_id", current_user["id"]) \
+        .is_("deleted_at", "null").execute()
+    return result.data
+
+
+@router.get("/trash", response_model=list[FileOut])
+def list_trash(current_user: dict = Depends(get_current_user)):
+    result = supabase.table("files").select("*") \
+        .eq("owner_id", current_user["id"]) \
+        .not_.is_("deleted_at", "null").execute()
+    return result.data
+
+
+@router.get("/search/query", response_model=list[FileOut])
+def search_files(
+    q: str | None = None,
+    mime_type: str | None = None,
+    starred: bool | None = None,
+    sort_by: str = "created_at",
+    order: str = "desc",
+    current_user: dict = Depends(get_current_user)
+):
+    query = supabase.table("files").select("*") \
+        .eq("owner_id", current_user["id"]) \
+        .is_("deleted_at", "null")
+
+    if q:
+        query = query.ilike("file_name", f"%{q}%")
+    if mime_type:
+        query = query.ilike("mime_type", f"{mime_type}%")
+    if starred is not None:
+        query = query.eq("starred", starred)
+
+    valid_sort_fields = {"created_at", "file_name", "file_size"}
+    sort_field = sort_by if sort_by in valid_sort_fields else "created_at"
+    ascending = order == "asc"
+
+    query = query.order(sort_field, desc=not ascending)
+
+    result = query.execute()
     return result.data
 
 
@@ -100,46 +141,33 @@ def move_file(file_id: str, payload: FileMove, current_user: dict = Depends(get_
     return result.data[0]
 
 
-@router.delete("/{file_id}")
-def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
-    file_record = _get_owned_file(file_id, current_user["id"], require_edit=True)
-
-    supabase.storage.from_(BUCKET_NAME).remove([file_record["storage_path"]])
-    supabase.table("files").delete().eq("id", file_id).execute()
-
-    return {"message": "File deleted successfully"}
-
-
-@router.get("/search/query", response_model=list[FileOut])
-def search_files(
-    q: str | None = None,
-    mime_type: str | None = None,
-    starred: bool | None = None,
-    sort_by: str = "created_at",
-    order: str = "desc",
-    current_user: dict = Depends(get_current_user)
-):
-    query = supabase.table("files").select("*").eq("owner_id", current_user["id"])
-
-    if q:
-        query = query.ilike("file_name", f"%{q}%")
-    if mime_type:
-        query = query.ilike("mime_type", f"{mime_type}%")
-    if starred is not None:
-        query = query.eq("starred", starred)
-
-    valid_sort_fields = {"created_at", "file_name", "file_size"}
-    sort_field = sort_by if sort_by in valid_sort_fields else "created_at"
-    ascending = order == "asc"
-
-    query = query.order(sort_field, desc=not ascending)
-
-    result = query.execute()
-    return result.data
-
-
 @router.patch("/{file_id}/star", response_model=FileOut)
 def toggle_star(file_id: str, payload: FileStarUpdate, current_user: dict = Depends(get_current_user)):
     _get_owned_file(file_id, current_user["id"])
     result = supabase.table("files").update({"starred": payload.starred}).eq("id", file_id).execute()
     return result.data[0]
+
+
+@router.delete("/{file_id}")
+def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"], require_edit=True)
+    now = datetime.now(timezone.utc).isoformat()
+    supabase.table("files").update({"deleted_at": now}).eq("id", file_id).execute()
+    return {"message": "File moved to trash"}
+
+
+@router.patch("/{file_id}/restore", response_model=FileOut)
+def restore_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_file(file_id, current_user["id"], require_edit=True)
+    result = supabase.table("files").update({"deleted_at": None}).eq("id", file_id).execute()
+    return result.data[0]
+
+
+@router.delete("/{file_id}/permanent")
+def permanent_delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    file_record = _get_owned_file(file_id, current_user["id"], require_edit=True)
+
+    supabase.storage.from_(BUCKET_NAME).remove([file_record["storage_path"]])
+    supabase.table("files").delete().eq("id", file_id).execute()
+
+    return {"message": "File permanently deleted"}

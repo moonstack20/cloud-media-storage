@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import * as filesApi from '../api/files'
 
@@ -103,12 +104,20 @@ export default function Dashboard() {
             {user?.full_name || user?.email}'s Archive
           </h1>
         </div>
-        <button
-          onClick={logout}
-          className="font-mono text-xs uppercase tracking-wide text-[#1B2A41]/60 hover:text-[#A63D40] transition-colors"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-6">
+          <Link
+            to="/trash"
+            className="font-mono text-xs uppercase tracking-wide text-[#1B2A41]/60 hover:text-[#1B2A41] transition-colors"
+          >
+            Trash
+          </Link>
+          <button
+            onClick={logout}
+            className="font-mono text-xs uppercase tracking-wide text-[#1B2A41]/60 hover:text-[#A63D40] transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <main className="px-8 py-8 max-w-6xl mx-auto">

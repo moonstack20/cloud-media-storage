@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import Trash from './pages/Trash'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -16,6 +17,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+      <Route path="/trash" element={<PrivateRoute><Trash /></PrivateRoute>} />
     </Routes>
   )
 }

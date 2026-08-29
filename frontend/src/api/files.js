@@ -21,3 +21,9 @@ export const renameFile = (fileId, newName) =>
 
 export const toggleStar = (fileId, starred) =>
   client.patch(`/files/${fileId}/star`, { starred })
+
+export const listTrash = () => client.get('/files/trash')
+
+export const restoreFile = (fileId) => client.patch(`/files/${fileId}/restore`)
+
+export const permanentDelete = (fileId) => client.delete(`/files/${fileId}/permanent`)
