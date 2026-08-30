@@ -19,5 +19,6 @@ class ShareOut(BaseModel):
     owner_id: UUID
     shared_with_id: UUID
     permission: str
+    resource_name: str | None = None
     created_at: datetime
 

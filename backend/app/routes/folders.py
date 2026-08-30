@@ -86,3 +86,15 @@ def get_breadcrumbs(folder_id: str, current_user: dict = Depends(get_current_use
         current_id = folder["parent_id"]
 
     return breadcrumbs
+
+@router.get("/{folder_id}/contents")
+def get_folder_contents(folder_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_folder(folder_id, current_user["id"])
+
+    subfolders = supabase.table("folders").select("*") \
+        .eq("parent_id", folder_id).execute()
+
+    files = supabase.table("files").select("*") \
+        .eq("folder_id", folder_id).is_("deleted_at", "null").execute()
+
+    return {"folders": subfolders.data, "files": files.data}

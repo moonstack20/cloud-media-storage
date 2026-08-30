@@ -19,6 +19,8 @@ export const deleteFile = (fileId) => client.delete(`/files/${fileId}`)
 export const renameFile = (fileId, newName) =>
   client.patch(`/files/${fileId}/rename`, { new_name: newName })
 
+export const moveFile = (fileId, folderId) => client.patch(`/files/${fileId}/move`, { folder_id: folderId })
+
 export const toggleStar = (fileId, starred) =>
   client.patch(`/files/${fileId}/star`, { starred })
 
