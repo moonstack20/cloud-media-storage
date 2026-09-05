@@ -5,6 +5,7 @@ import * as filesApi from '../api/files'
 import * as foldersApi from '../api/folders'
 import VersionHistoryModal from '../components/VersionHistoryModal'
 import ShareModal from '../components/ShareModal'
+import PublicLinkModal from '../components/PublicLinkModal'
 import NotificationBell from '../components/NotificationBell'
 
 function formatBytes(bytes) {
@@ -42,6 +43,7 @@ export default function Dashboard() {
   const [newFolderName, setNewFolderName] = useState('')
   const [historyFile, setHistoryFile] = useState(null)
   const [shareTarget, setShareTarget] = useState(null)
+  const [linkTarget, setLinkTarget] = useState(null)
   const fileInputRef = useRef(null)
 
   const loadData = useCallback(async () => {
@@ -150,6 +152,28 @@ export default function Dashboard() {
     if (!confirm(`Delete folder "${folder.name}"? Files inside will be moved to root.`)) return
     try {
       await foldersApi.deleteFolder(folder.id)
+      loadData()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleRenameFile = async (file) => {
+    const newName = prompt('Rename file', file.file_name)
+    if (!newName || newName === file.file_name) return
+    try {
+      await filesApi.renameFile(file.id, newName)
+      loadData()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleRenameFolder = async (folder) => {
+    const newName = prompt('Rename folder', folder.name)
+    if (!newName || newName === folder.name) return
+    try {
+      await foldersApi.renameFolder(folder.id, newName)
       loadData()
     } catch (err) {
       console.error(err)
@@ -284,12 +308,20 @@ export default function Dashboard() {
                 <p className="font-medium text-[#1B2A41] truncate flex items-center gap-2">
                   <span className="text-[#B08D57]">▸</span> {folder.name}
                 </p>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder) }}
-                  className="font-mono text-[11px] uppercase text-[#A63D40]/60 hover:text-[#A63D40]"
-                >
-                  Delete
-                </button>
+                <div className="flex gap-3 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRenameFolder(folder) }}
+                    className="font-mono text-[11px] uppercase text-[#1B2A41]/60 hover:text-[#1B2A41]"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder) }}
+                    className="font-mono text-[11px] uppercase text-[#A63D40]/60 hover:text-[#A63D40]"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
 
@@ -317,11 +349,17 @@ export default function Dashboard() {
                   <button onClick={() => handleDownload(file)} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
                     Download
                   </button>
+                  <button onClick={() => handleRenameFile(file)} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
+                    Rename
+                  </button>
                   <button onClick={() => setHistoryFile(file)} className="text-[#B08D57] hover:text-[#8f7143]">
                     History
                   </button>
                   <button onClick={() => setShareTarget({ type: 'file', id: file.id, name: file.file_name })} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
                     Share
+                  </button>
+                  <button onClick={() => setLinkTarget({ type: 'file', id: file.id, name: file.file_name })} className="text-[#B08D57] hover:text-[#8f7143]">
+                    Link
                   </button>
                   <button onClick={() => handleDelete(file)} className="text-[#A63D40]/70 hover:text-[#A63D40]">
                     Delete
@@ -345,6 +383,13 @@ export default function Dashboard() {
         <ShareModal
           resource={shareTarget}
           onClose={() => setShareTarget(null)}
+        />
+      )}
+
+      {linkTarget && (
+        <PublicLinkModal
+          resource={linkTarget}
+          onClose={() => setLinkTarget(null)}
         />
       )}
     </div>

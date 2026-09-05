@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Trash from './pages/Trash'
 import Activity from './pages/Activity'
 import SharedWithMe from './pages/SharedWithMe'
+import PublicAccess from './pages/PublicAccess'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -17,6 +18,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/public/:token" element={<PublicAccess />} />
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/trash" element={<PrivateRoute><Trash /></PrivateRoute>} />
