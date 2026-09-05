@@ -14,3 +14,9 @@ export const renameFolder = (folderId, newName) =>
 export const deleteFolder = (folderId) => client.delete(`/folders/${folderId}`)
 
 export const getBreadcrumbs = (folderId) => client.get(`/folders/${folderId}/breadcrumbs`)
+
+export const listFolderTrash = () => client.get('/folders/trash')
+
+export const restoreFolder = (folderId) => client.patch(`/folders/${folderId}/restore`)
+
+export const permanentDeleteFolder = (folderId) => client.delete(`/folders/${folderId}/permanent`)

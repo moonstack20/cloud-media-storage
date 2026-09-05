@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
 from app.core.database import supabase
 from app.core.deps import get_current_user
 from app.schemas.folder import FolderCreate, FolderRename, FolderOut, BreadcrumbItem
@@ -47,12 +48,22 @@ def create_folder(payload: FolderCreate, current_user: dict = Depends(get_curren
 
 @router.get("", response_model=list[FolderOut])
 def list_folders(parent_id: str | None = None, current_user: dict = Depends(get_current_user)):
-    query = supabase.table("folders").select("*").eq("owner_id", current_user["id"])
+    query = supabase.table("folders").select("*") \
+        .eq("owner_id", current_user["id"]) \
+        .is_("deleted_at", "null")
     if parent_id:
         query = query.eq("parent_id", parent_id)
     else:
         query = query.is_("parent_id", "null")
     result = query.execute()
+    return result.data
+
+
+@router.get("/trash", response_model=list[FolderOut])
+def list_trash(current_user: dict = Depends(get_current_user)):
+    result = supabase.table("folders").select("*") \
+        .eq("owner_id", current_user["id"]) \
+        .not_.is_("deleted_at", "null").execute()
     return result.data
 
 
@@ -71,8 +82,23 @@ def rename_folder(folder_id: str, payload: FolderRename, current_user: dict = De
 @router.delete("/{folder_id}")
 def delete_folder(folder_id: str, current_user: dict = Depends(get_current_user)):
     _get_owned_folder(folder_id, current_user["id"], require_edit=True)
+    now = datetime.now(timezone.utc).isoformat()
+    supabase.table("folders").update({"deleted_at": now}).eq("id", folder_id).execute()
+    return {"message": "Folder moved to trash"}
+
+
+@router.patch("/{folder_id}/restore", response_model=FolderOut)
+def restore_folder(folder_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_folder(folder_id, current_user["id"], require_edit=True)
+    result = supabase.table("folders").update({"deleted_at": None}).eq("id", folder_id).execute()
+    return result.data[0]
+
+
+@router.delete("/{folder_id}/permanent")
+def permanent_delete_folder(folder_id: str, current_user: dict = Depends(get_current_user)):
+    _get_owned_folder(folder_id, current_user["id"], require_edit=True)
     supabase.table("folders").delete().eq("id", folder_id).execute()
-    return {"message": "Folder deleted successfully"}
+    return {"message": "Folder permanently deleted"}
 
 
 @router.get("/{folder_id}/breadcrumbs", response_model=list[BreadcrumbItem])
@@ -87,12 +113,13 @@ def get_breadcrumbs(folder_id: str, current_user: dict = Depends(get_current_use
 
     return breadcrumbs
 
+
 @router.get("/{folder_id}/contents")
 def get_folder_contents(folder_id: str, current_user: dict = Depends(get_current_user)):
     _get_owned_folder(folder_id, current_user["id"])
 
     subfolders = supabase.table("folders").select("*") \
-        .eq("parent_id", folder_id).execute()
+        .eq("parent_id", folder_id).is_("deleted_at", "null").execute()
 
     files = supabase.table("files").select("*") \
         .eq("folder_id", folder_id).is_("deleted_at", "null").execute()

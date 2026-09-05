@@ -14,6 +14,7 @@ class FolderOut(BaseModel):
     owner_id: UUID
     name: str
     parent_id: UUID | None = None
+    deleted_at: datetime | None = None
     created_at: datetime
 
 class BreadcrumbItem(BaseModel):
