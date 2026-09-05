@@ -39,6 +39,13 @@ async def upload_file(
     current_user: dict = Depends(get_current_user)
 ):
     file_bytes = await file.read()
+
+    QUOTA_LIMIT_BYTES = 10 * 1024 * 1024 * 1024
+    existing_files = supabase.table("files").select("file_size") \
+        .eq("owner_id", current_user["id"]).is_("deleted_at", "null").execute()
+    used_bytes = sum(f["file_size"] or 0 for f in existing_files.data)
+    if used_bytes + len(file_bytes) > QUOTA_LIMIT_BYTES:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     file_ext = file.filename.split(".")[-1] if "." in file.filename else ""
     storage_path = f"{current_user['id']}/{uuid.uuid4()}.{file_ext}"
 
@@ -283,3 +290,45 @@ def download_version(file_id: str, version_id: str, current_user: dict = Depends
 
     signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(version["storage_path"], 60)
     return {"download_url": signed_url.get("signedURL") or signed_url.get("signedUrl")}
+
+
+PREVIEWABLE_TYPES = ("image/", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+@router.get("/{file_id}/preview")
+def preview_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    file_record = _get_owned_file(file_id, current_user["id"])
+
+    mime_type = file_record.get("mime_type") or ""
+    is_previewable = mime_type.startswith(PREVIEWABLE_TYPES)
+
+    if not is_previewable:
+        return {"previewable": False, "preview_url": None, "mime_type": mime_type}
+
+    signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(
+        file_record["storage_path"], 300
+    )
+
+    return {
+        "previewable": True,
+        "preview_url": signed_url.get("signedURL") or signed_url.get("signedUrl"),
+        "mime_type": mime_type
+    }
+
+
+@router.get("/quota/usage")
+def get_storage_quota(current_user: dict = Depends(get_current_user)):
+    QUOTA_LIMIT_BYTES = 10 * 1024 * 1024 * 1024
+
+    result = supabase.table("files").select("file_size") \
+        .eq("owner_id", current_user["id"]) \
+        .is_("deleted_at", "null").execute()
+
+    used_bytes = sum(f["file_size"] or 0 for f in result.data)
+
+    return {
+        "used_bytes": used_bytes,
+        "limit_bytes": QUOTA_LIMIT_BYTES,
+        "used_percent": round((used_bytes / QUOTA_LIMIT_BYTES) * 100, 2),
+        "remaining_bytes": max(0, QUOTA_LIMIT_BYTES - used_bytes)
+    }

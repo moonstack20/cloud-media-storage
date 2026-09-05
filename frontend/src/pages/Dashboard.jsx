@@ -6,6 +6,8 @@ import * as foldersApi from '../api/folders'
 import VersionHistoryModal from '../components/VersionHistoryModal'
 import ShareModal from '../components/ShareModal'
 import PublicLinkModal from '../components/PublicLinkModal'
+import * as tagsApi from '../api/tags'
+import PreviewModal from '../components/PreviewModal'
 import NotificationBell from '../components/NotificationBell'
 
 function formatBytes(bytes) {
@@ -44,11 +46,15 @@ export default function Dashboard() {
   const [historyFile, setHistoryFile] = useState(null)
   const [shareTarget, setShareTarget] = useState(null)
   const [linkTarget, setLinkTarget] = useState(null)
+  const [quota, setQuota] = useState(null)
+  const [previewFile, setPreviewFile] = useState(null)
+  const [fileTags, setFileTags] = useState({})
   const fileInputRef = useRef(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
+      tagsApi.getQuota().then((res) => setQuota(res.data)).catch(console.error)
       const [foldersRes, breadcrumbsRes, allFoldersRes] = await Promise.all([
         foldersApi.listFolders(currentFolderId),
         currentFolderId ? foldersApi.getBreadcrumbs(currentFolderId) : Promise.resolve({ data: [] }),
@@ -70,6 +76,11 @@ export default function Dashboard() {
         : filesRes.data.filter((f) => (f.folder_id || null) === currentFolderId)
 
       setFiles(filtered)
+
+      const tagResults = await Promise.all(
+        filtered.map((f) => tagsApi.getFileTags(f.id).then((r) => [f.id, r.data]).catch(() => [f.id, []]))
+      )
+      setFileTags(Object.fromEntries(tagResults))
     } catch (err) {
       console.error(err)
     } finally {
@@ -148,6 +159,23 @@ export default function Dashboard() {
     }
   }
 
+  const handleAddTag = async (file) => {
+    const tagName = prompt('Tag name (creates it if new)')
+    if (!tagName) return
+    try {
+      let tagsRes = await tagsApi.listTags()
+      let tag = tagsRes.data.find((t) => t.name.toLowerCase() === tagName.toLowerCase())
+      if (!tag) {
+        const created = await tagsApi.createTag(tagName, '#B08D57')
+        tag = created.data
+      }
+      await tagsApi.attachTag(file.id, tag.id)
+      alert('Tag "' + tag.name + '" added to ' + file.file_name)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const handleDeleteFolder = async (folder) => {
     if (!confirm(`Delete folder "${folder.name}"? Files inside will be moved to root.`)) return
     try {
@@ -188,6 +216,19 @@ export default function Dashboard() {
           <h1 className="font-[var(--font-display)] text-2xl text-[#1B2A41]">
             {user?.full_name || user?.email}'s Archive
           </h1>
+          {quota && (
+            <div className="mt-2 w-48">
+              <div className="h-1 bg-[#1B2A41]/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#B08D57]"
+                  style={{ width: Math.min(quota.used_percent, 100) + '%' }}
+                />
+              </div>
+              <p className="font-mono text-[10px] text-[#1B2A41]/50 mt-1">
+                {(quota.used_bytes / (1024 * 1024)).toFixed(1)} MB of {(quota.limit_bytes / (1024 * 1024 * 1024)).toFixed(0)} GB used
+              </p>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-6">
           <Link to="/shared" className="font-mono text-xs uppercase tracking-wide text-[#1B2A41]/60 hover:text-[#1B2A41] transition-colors">
@@ -341,11 +382,28 @@ export default function Dashboard() {
                     ★
                   </button>
                 </div>
-                <div className="font-mono text-[11px] text-[#1B2A41]/50 mb-4 space-y-0.5">
+                <div className="font-mono text-[11px] text-[#1B2A41]/50 mb-2 space-y-0.5">
                   <p>{formatBytes(file.file_size)} · {file.mime_type || 'unknown'}</p>
                   <p>{formatDate(file.created_at)}</p>
                 </div>
+                {fileTags[file.id] && fileTags[file.id].length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {fileTags[file.id].map((t) => (
+                      <span
+                        key={t.id}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded-full text-[#F7F4EA]"
+                        style={{ backgroundColor: t.color }}
+                      >
+                        {t.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(!fileTags[file.id] || fileTags[file.id].length === 0) && <div className="mb-4" />}
                 <div className="flex gap-3 font-mono text-[11px] uppercase tracking-wide flex-wrap">
+                  <button onClick={() => setPreviewFile(file)} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
+                    Preview
+                  </button>
                   <button onClick={() => handleDownload(file)} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
                     Download
                   </button>
@@ -360,6 +418,9 @@ export default function Dashboard() {
                   </button>
                   <button onClick={() => setLinkTarget({ type: 'file', id: file.id, name: file.file_name })} className="text-[#B08D57] hover:text-[#8f7143]">
                     Link
+                  </button>
+                  <button onClick={() => handleAddTag(file)} className="text-[#1B2A41]/70 hover:text-[#1B2A41]">
+                    Tag
                   </button>
                   <button onClick={() => handleDelete(file)} className="text-[#A63D40]/70 hover:text-[#A63D40]">
                     Delete
@@ -390,6 +451,13 @@ export default function Dashboard() {
         <PublicLinkModal
           resource={linkTarget}
           onClose={() => setLinkTarget(null)}
+        />
+      )}
+
+      {previewFile && (
+        <PreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
         />
       )}
     </div>

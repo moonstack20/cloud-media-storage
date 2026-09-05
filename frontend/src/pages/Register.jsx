@@ -19,7 +19,12 @@ export default function Register() {
       await registerUser(email, password, fullName)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Could not create account. Try a different email.')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        setError(detail.map((d) => d.msg.replace('Value error, ', '')).join(' '))
+      } else {
+        setError(detail || 'Could not create account. Try a different email.')
+      }
     } finally {
       setLoading(false)
     }
@@ -47,6 +52,9 @@ export default function Register() {
                 className="w-full bg-transparent border-b-2 border-[#1B2A41]/20 focus:border-[#B08D57] outline-none py-2 text-[#1B2A41] transition-colors"
                 placeholder="Jane Doe"
               />
+              <p className="text-[10px] text-[#1B2A41]/40 mt-1.5 font-mono">
+                Letters and spaces only
+              </p>
             </div>
             <div>
               <label className="block font-mono text-[11px] tracking-wide text-[#1B2A41]/60 uppercase mb-1.5">
@@ -74,6 +82,9 @@ export default function Register() {
                 className="w-full bg-transparent border-b-2 border-[#1B2A41]/20 focus:border-[#B08D57] outline-none py-2 text-[#1B2A41] transition-colors"
                 placeholder="At least 8 characters"
               />
+              <p className="text-[10px] text-[#1B2A41]/40 mt-1.5 font-mono">
+                8+ chars, uppercase, lowercase, number, symbol
+              </p>
             </div>
 
             {error && (
